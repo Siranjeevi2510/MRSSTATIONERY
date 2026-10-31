@@ -208,7 +208,7 @@ export default function App() {
       <div className="navlabel">WORKSPACE</div>
       {nav.map(n => <button key={n} className={page === n ? "nav active" : "nav"} onClick={() => { setPage(n); setReceipt(null); }}><span>{({ Dashboard: "▦", "POS Billing": "▣", Products: "▤", Sales: "↗", Inventory: "▥", Staff: "♙", Settings: "⚙" } as Record<string, string>)[n]}</span>{n}</button>)}
       <div className="sidebarfoot"><span className="live"></span> Connected · {session.user.email}</div>
-      <button className="signout" onClick={() => supabase.auth.signOut()}>Sign out</button>
+      <button className="signout" onClick={async () => { if (!supabase) { setMessage("Supabase connection is not configured."); return; } await supabase.auth.signOut(); }}>Sign out</button>
     </aside>
     <main className="main">
       <header><div><span className="eyebrow">{storeName.toUpperCase()} / STORE</span><h1>{page}</h1></div><div className="user"><div className="avatar">M</div><div><b>{session.user.email}</b><small>{profile?.role ? profile.role.toUpperCase() : "Signed in"}</small></div></div></header>

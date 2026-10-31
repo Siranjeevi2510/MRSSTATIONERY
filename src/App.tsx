@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./lib/supabase";
+import PublicCatalogue from "./PublicCatalogue";
 
 type Product = {
   id: string;
@@ -33,6 +34,11 @@ const money = (n: number) => "₹" + Number(n || 0).toFixed(2);
 const todayStart = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.toISOString(); };
 
 export default function App() {
+  const path = window.location.pathname.replace(/\\/+$/, "") || "/";
+  return path === "/catalog" ? <PublicCatalogue /> : <PosApp />;
+}
+
+function PosApp() {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [staff, setStaff] = useState<UserProfile[]>([]);

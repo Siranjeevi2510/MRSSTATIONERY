@@ -86,6 +86,7 @@ export default function PublicCatalogue() {
   return <div className="public-catalogue">
     <header className="catalogue-header">
       <a className="catalogue-brand" href="/catalog"><span className="catalogue-logo">M</span><span><b>{storeName}</b><small>YOUR EVERYDAY STATIONERY STORE</small></span></a>
+      <nav className="catalogue-nav" aria-label="Main navigation"><a href="#products">Products</a><a href="#about">About Us</a><a href="#visit">Visit Store</a><a className="catalogue-social-future" href="#social">Social Media <small>Coming soon</small></a></nav>
       <button className="catalogue-cart-button" onClick={() => setCartOpen(true)} aria-label="Open shopping cart">Cart <span>{cartCount}</span></button>
     </header>
     <main className="catalogue-main">
@@ -107,8 +108,17 @@ export default function PublicCatalogue() {
               <div className="catalogue-product-info"><span className="catalogue-sku">{product.sku}</span><h3>{product.name}</h3><p className={product.in_stock ? "catalogue-stock" : "catalogue-stock out"}>{product.in_stock ? "● Available" : "● Currently unavailable"}</p><div className="catalogue-product-bottom"><strong>{money(product.selling_price)}</strong><button disabled={!product.in_stock} onClick={() => add(product)}>{product.in_stock ? "＋ Add" : "Out of stock"}</button></div></div>
             </article>)}</div>}
       </section>
+      <section className="catalogue-info-section" id="about">
+        <div className="catalogue-info-copy"><span className="catalogue-kicker">GET TO KNOW US</span><h2>About MRS Stationery</h2><p>MRS Stationery is your one-stop destination for complete stationery needs. From everyday school and office essentials to art, craft and writing supplies, we aim to offer a wide selection with honest, affordable pricing.</p><p>We believe customers deserve quality products at fair prices, with friendly service they can trust. Whether you are a student, parent, teacher or working professional, we are here to help you find what you need.</p><strong>Complete stationery. Honest pricing. Friendly service.</strong></div>
+        <div className="catalogue-about-mark" aria-hidden="true"><span>✎</span><b>Everything for<br/>learning & creating</b><small>YOUR EVERYDAY STATIONERY STORE</small></div>
+      </section>
+      <section className="catalogue-visit-section" id="visit">
+        <div><span className="catalogue-kicker">COME SAY HELLO</span><h2>Visit Our Store</h2><p>We would love to welcome you. Visit MRS Stationery at Ayyampettai, Tamil Nadu, for your complete stationery needs.</p><b>V5VP+JG, Ayyampettai, Tamil Nadu</b><small>Search this Plus Code in Google Maps for directions.</small></div>
+        <a className="catalogue-map-link" href="https://www.google.com/maps/search/?api=1&query=V5VP%2BJG%20Ayyampettai%2C%20Tamil%20Nadu" target="_blank" rel="noreferrer">Get directions <span>↗</span></a>
+      </section>
+      <section className="catalogue-social-section" id="social"><div><span className="catalogue-kicker">STAY CONNECTED</span><h2>Find us on Social Media</h2><p>Our social media pages are coming soon. Check back for updates, new arrivals and special offers.</p></div><span className="catalogue-coming-soon">Coming soon</span></section>
     </main>
-    <footer className="catalogue-footer"><b>{storeName}</b><span>Browse online · Enquire on WhatsApp</span></footer>
+    <footer className="catalogue-footer"><b>{storeName}</b><span>Complete stationery · Honest pricing · Friendly service</span><a href="#visit">Visit our store ↑</a></footer>
     {cartOpen && <div className="catalogue-overlay" onClick={() => setCartOpen(false)}>
       <aside className="catalogue-drawer" onClick={e => e.stopPropagation()}>
         <div className="catalogue-drawer-head"><div><span className="catalogue-kicker">YOUR SELECTION</span><h2>Shopping cart ({cartCount})</h2></div><button className="catalogue-close" onClick={() => setCartOpen(false)} aria-label="Close cart">×</button></div>

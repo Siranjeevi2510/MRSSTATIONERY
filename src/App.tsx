@@ -14,6 +14,7 @@ type Product = {
   stock_qty: number;
   reorder_level: number;
   active: boolean;
+  image_url: string | null;
 };
 type CartItem = Product & { qty: number };
 type UserProfile = { user_id: string; email: string | null; display_name: string | null; role: "owner" | "manager" | "cashier" };
@@ -59,7 +60,9 @@ function PosApp() {
   const [gstEnabled, setGstEnabled] = useState(() => localStorage.getItem("mrs_gst_enabled") === "true");
   const [gstRate, setGstRate] = useState(() => localStorage.getItem("mrs_gst_rate") || "5");
   const [storeName, setStoreName] = useState(() => localStorage.getItem("mrs_store_name") || "MRS Stationery");
-  const [productForm, setProductForm] = useState({ id: "", name: "", sku: "", category: "", selling_price: "", cost_price: "", stock_qty: "", reorder_level: "5" });
+  const [productForm, setProductForm] = useState({ id: "", name: "", sku: "", category: "", selling_price: "", cost_price: "", stock_qty: "", reorder_level: "5", image_url: "" });
+  const [productImage, setProductImage] = useState<File | null>(null);
+  const [productImagePreview, setProductImagePreview] = useState("");
   const [showProductForm, setShowProductForm] = useState(false);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
 
@@ -160,8 +163,10 @@ function PosApp() {
     setProductForm(product ? {
       id: product.id, name: product.name, sku: product.sku, category: product.category || "",
       selling_price: String(product.selling_price), cost_price: String(product.cost_price),
-      stock_qty: String(product.stock_qty), reorder_level: String(product.reorder_level)
-    } : { id: "", name: "", sku: "", category: "", selling_price: "", cost_price: "", stock_qty: "", reorder_level: "5" });
+      stock_qty: String(product.stock_qty), reorder_level: String(product.reorder_level), image_url: product.image_url || ""
+    } : { id: "", name: "", sku: "", category: "", selling_price: "", cost_price: "", stock_qty: "", reorder_level: "5", image_url: "" });
+    setProductImage(null);
+    setProductImagePreview(product?.image_url || "");
     setShowProductForm(true);
   }
 
@@ -177,9 +182,18 @@ function PosApp() {
       setMessage("Enter a product name, unique SKU, valid price and whole-number stock quantity."); return;
     }
     setLoading(true); setMessage("");
+    let imageUrl = productForm.image_url || null;
+    if (productImage) {
+      const extension = productImage.name.split(".").pop()?.toLowerCase() || "jpg";
+      const imagePath = Date.now() + "-" + crypto.randomUUID() + "." + extension;
+      const upload = await supabase.storage.from("product-images").upload(imagePath, productImage, { contentType: productImage.type, upsert: false });
+      if (upload.error) { setLoading(false); setMessage("Image upload failed: " + upload.error.message); return; }
+      imageUrl = supabase.storage.from("product-images").getPublicUrl(imagePath).data.publicUrl;
+    }
+    const productPayload = { ...payload, image_url: imageUrl };
     const result = productForm.id
-      ? await supabase.from("products").update(payload).eq("id", productForm.id)
-      : await supabase.from("products").insert(payload);
+      ? await supabase.from("products").update(productPayload).eq("id", productForm.id)
+      : await supabase.from("products").insert(productPayload);
     setLoading(false);
     if (result.error) { setMessage(result.error.message); return; }
     setShowProductForm(false); setMessage("Product saved."); await refreshData();
@@ -242,7 +256,7 @@ function PosApp() {
       {page === "Staff" && profile?.role === "owner" && <div className="panel"><div className="panelhead"><div><h3>Staff accounts and roles</h3><p>Create/invite accounts in Supabase Authentication → Users, then assign their role here. New accounts default to cashier.</p></div><button className="textbtn" onClick={loadStaff}>Refresh</button></div><div className="tablewrap"><table><thead><tr><th>EMAIL</th><th>DISPLAY NAME</th><th>ROLE</th></tr></thead><tbody>{staff.map(member => <tr key={member.user_id}><td><b>{member.email || "—"}</b>{member.user_id === session.user.id ? " (you)" : ""}</td><td>{member.display_name || "—"}</td><td><select aria-label={"Role for " + member.email} value={member.role} disabled={member.user_id === session.user.id} onChange={e => updateStaffRole(member.user_id, e.target.value as UserProfile["role"])}><option value="owner">Owner</option><option value="manager">Manager</option><option value="cashier">Cashier</option></select></td></tr>)}</tbody></table>{!staff.length && <p className="muted">No staff profiles found yet.</p>}</div><p className="muted">For security, your own role cannot be changed from this screen. Use the Supabase SQL Editor for the initial owner promotion.</p></div>}
       {page === "Settings" && profile && profile.role !== "cashier" && <div className="panel settings"><h3>Store settings</h3><p className="muted">These preferences are saved in this browser.</p><label className="fieldlabel">Store name<input value={storeName} onChange={e => setStoreName(e.target.value)}/></label><label className="checkline"><input type="checkbox" checked={gstEnabled} onChange={e => setGstEnabled(e.target.checked)}/> Enable GST on bills</label><label className="fieldlabel">GST rate (%)<input type="number" min="0" max="100" value={gstRate} onChange={e => setGstRate(e.target.value)} disabled={!gstEnabled}/></label><button className="primary" onClick={saveSettings}>Save preferences</button><p className="muted">Confirm your applicable GST rate and whether your product prices are GST-inclusive or GST-exclusive before issuing real tax invoices.</p></div>}
       {receipt && <div className="modalback"><div className="receipt print-area"><div className="receipt-head"><h2>{storeName}</h2><p>SALES RECEIPT</p><b>{receipt.invoice_number}</b><small>{new Date(receipt.created_at).toLocaleString("en-IN")}</small></div><div className="receipt-lines">{receipt.items.map(item => <div key={item.id}><span>{item.name} × {item.qty}</span><b>{money(item.selling_price * item.qty)}</b></div>)}</div><div className="receipt-total"><div><span>Subtotal</span><b>{money(receipt.subtotal)}</b></div><div><span>Discount</span><b>{money(receipt.discount_amount)}</b></div><div><span>GST</span><b>{money(receipt.tax_amount)}</b></div><div className="grand"><span>Total</span><b>{money(receipt.total_amount)}</b></div><small>Payment: {receipt.payment_method.toUpperCase()}</small></div><div className="receipt-actions"><button className="primary" onClick={() => window.print()}>Print receipt</button><button className="textbtn" onClick={() => setReceipt(null)}>Close</button></div></div></div>}
-      {showProductForm && <div className="modalback"><form className="productform" onSubmit={saveProduct}><div className="panelhead"><h3>{productForm.id ? "Edit product" : "Add product"}</h3><button type="button" className="textbtn" onClick={() => setShowProductForm(false)}>Close</button></div><label className="fieldlabel">Product name<input required value={productForm.name} onChange={e => setProductForm({ ...productForm, name: e.target.value })}/></label><label className="fieldlabel">SKU<input required value={productForm.sku} onChange={e => setProductForm({ ...productForm, sku: e.target.value })}/></label><label className="fieldlabel">Category<input value={productForm.category} onChange={e => setProductForm({ ...productForm, category: e.target.value })}/></label><div className="formrow"><label className="fieldlabel">Selling price (₹)<input required type="number" min="0" step="0.01" value={productForm.selling_price} onChange={e => setProductForm({ ...productForm, selling_price: e.target.value })}/></label><label className="fieldlabel">Cost price (₹)<input type="number" min="0" step="0.01" value={productForm.cost_price} onChange={e => setProductForm({ ...productForm, cost_price: e.target.value })}/></label></div><div className="formrow"><label className="fieldlabel">Opening stock<input required type="number" min="0" step="1" value={productForm.stock_qty} onChange={e => setProductForm({ ...productForm, stock_qty: e.target.value })}/></label><label className="fieldlabel">Reorder level<input type="number" min="0" step="1" value={productForm.reorder_level} onChange={e => setProductForm({ ...productForm, reorder_level: e.target.value })}/></label></div><button className="primary full" disabled={loading}>Save product</button></form></div>}
+      {showProductForm && <div className="modalback"><form className="productform" onSubmit={saveProduct}><div className="panelhead"><h3>{productForm.id ? "Edit product" : "Add product"}</h3><button type="button" className="textbtn" onClick={() => setShowProductForm(false)}>Close</button></div><label className="fieldlabel">Product image<input type="file" accept="image/*" onChange={e => { const file = e.target.files?.[0] || null; setProductImage(file); setProductImagePreview(file ? URL.createObjectURL(file) : productForm.image_url); }}/></label>{productImagePreview && <img src={productImagePreview} alt="Product preview" style={{ width: "100%", maxHeight: 180, objectFit: "contain", borderRadius: 8, background: "#f3f5f8" }}/>}<small className="muted">Choose a clear JPG, PNG or WebP image. You can replace it later.</small><label className="fieldlabel">Product name<input required value={productForm.name} onChange={e => setProductForm({ ...productForm, name: e.target.value })}/></label><label className="fieldlabel">SKU<input required value={productForm.sku} onChange={e => setProductForm({ ...productForm, sku: e.target.value })}/></label><label className="fieldlabel">Category<input value={productForm.category} onChange={e => setProductForm({ ...productForm, category: e.target.value })}/></label><div className="formrow"><label className="fieldlabel">Selling price (₹)<input required type="number" min="0" step="0.01" value={productForm.selling_price} onChange={e => setProductForm({ ...productForm, selling_price: e.target.value })}/></label><label className="fieldlabel">Cost price (₹)<input type="number" min="0" step="0.01" value={productForm.cost_price} onChange={e => setProductForm({ ...productForm, cost_price: e.target.value })}/></label></div><div className="formrow"><label className="fieldlabel">Opening stock<input required type="number" min="0" step="1" value={productForm.stock_qty} onChange={e => setProductForm({ ...productForm, stock_qty: e.target.value })}/></label><label className="fieldlabel">Reorder level<input type="number" min="0" step="1" value={productForm.reorder_level} onChange={e => setProductForm({ ...productForm, reorder_level: e.target.value })}/></label></div><button className="primary full" disabled={loading}>Save product</button></form></div>}
       <footer>{storeName} POS <span>·</span> Supabase connected</footer>
     </main>
   </div>;

@@ -15,6 +15,7 @@ type Product = {
   active: boolean;
 };
 type CartItem = Product & { qty: number };
+type UserProfile = { user_id: string; email: string | null; display_name: string | null; role: "owner" | "manager" | "cashier" };
 type Sale = {
   id: string;
   invoice_number: string;
@@ -33,6 +34,8 @@ const todayStart = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return 
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [staff, setStaff] = useState<UserProfile[]>([]);
   const [authLoading, setAuthLoading] = useState(true);
   const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
@@ -62,9 +65,30 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (session) { void refreshData(); }
-    else { setProducts([]); setSales([]); }
+    if (session) { void refreshData(); void loadProfile(); }
+    else { setProducts([]); setSales([]); setProfile(null); setStaff([]); }
   }, [session]);
+
+  async function loadProfile() {
+    if (!supabase || !session) return;
+    const { data, error } = await supabase.from("profiles").select("user_id,email,display_name,role").eq("user_id", session.user.id).single();
+    if (error) { setMessage("Unable to load your staff role: " + error.message); setProfile(null); return; }
+    setProfile(data as UserProfile);
+  }
+
+  async function loadStaff() {
+    if (!supabase || profile?.role !== "owner") return;
+    const { data, error } = await supabase.from("profiles").select("user_id,email,display_name,role").order("created_at");
+    if (error) setMessage("Unable to load staff: " + error.message);
+    else setStaff((data || []) as UserProfile[]);
+  }
+
+  async function updateStaffRole(userId: string, role: UserProfile["role"]) {
+    if (!supabase || profile?.role !== "owner") return;
+    const { error } = await supabase.from("profiles").update({ role, updated_at: new Date().toISOString() }).eq("user_id", userId);
+    if (error) setMessage("Role update failed: " + error.message);
+    else { setMessage("Staff role updated."); await loadStaff(); }
+  }
 
   async function refreshData() {
     if (!supabase) return;
@@ -93,6 +117,8 @@ export default function App() {
     else if (authMode === "signup" && !result.data.session) setAuthMessage("Account created. Check your email to confirm your address, then sign in.");
     else setAuthMessage("Signed in successfully.");
   }
+
+  useEffect(() => { if (profile?.role === "owner") void loadStaff(); }, [profile]);
 
   const subtotal = useMemo(() => cart.reduce((sum, item) => sum + Number(item.selling_price) * item.qty, 0), [cart]);
   const discountAmount = Math.max(0, Math.min(subtotal, Number(discount) || 0));
@@ -173,7 +199,12 @@ export default function App() {
   if (authLoading) return <div className="authscreen"><div className="authbox">Loading MRS Stationery…</div></div>;
   if (!session) return <div className="authscreen"><form className="authbox" onSubmit={handleAuth}><div className="brandmark">M</div><span className="eyebrow">MRS STATIONERY POS</span><h1>{authMode === "signin" ? "Welcome back" : "Create owner account"}</h1><p>Sign in to manage your store, products and billing.</p><label>Email address<input required type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" /></label><label>Password<input required minLength={6} type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="At least 6 characters" /></label><button className="primary full" disabled={authLoading}>{authMode === "signin" ? "Sign in" : "Create account"}</button>{authMessage && <p className="notice">{authMessage}</p>}<button type="button" className="textbtn" onClick={() => { setAuthMode(authMode === "signin" ? "signup" : "signin"); setAuthMessage(""); }}>{authMode === "signin" ? "First time? Create an owner account" : "Already registered? Sign in"}</button></form></div>;
 
-  const nav = ["Dashboard", "POS Billing", "Products", "Sales", "Inventory", "Staff", "Settings"];
+  const nav = profile?.role === "cashier"
+    ? ["Dashboard", "POS Billing", "Sales"]
+    : profile?.role === "manager"
+      ? ["Dashboard", "POS Billing", "Products", "Sales", "Inventory", "Settings"]
+      : ["Dashboard", "POS Billing", "Products", "Sales", "Inventory", "Staff", "Settings"];
+  if (session && !profile) return <div className="authscreen"><div className="authbox"><h1>Loading staff profile</h1><p>Your account profile is being checked. If this message remains, ask the owner to verify your staff profile in Supabase.</p></div></div>;
   const filteredProducts = products.filter(p => (p.name + p.sku + (p.category || "")).toLowerCase().includes(search.toLowerCase()));
   return <div className="shell">
     <aside className="sidebar">
@@ -184,7 +215,7 @@ export default function App() {
       <button className="signout" onClick={() => supabase.auth.signOut()}>Sign out</button>
     </aside>
     <main className="main">
-      <header><div><span className="eyebrow">{storeName.toUpperCase()} / STORE</span><h1>{page}</h1></div><div className="user"><div className="avatar">M</div><div><b>{session.user.email}</b><small>Signed in</small></div></div></header>
+      <header><div><span className="eyebrow">{storeName.toUpperCase()} / STORE</span><h1>{page}</h1></div><div className="user"><div className="avatar">M</div><div><b>{session.user.email}</b><small>{profile?.role ? profile.role.toUpperCase() : "Signed in"}</small></div></div></header>
       {message && <div className="notice">{message}<button onClick={() => setMessage("")}>×</button></div>}
       {loading && <div className="muted">Working…</div>}
       {page === "Dashboard" && <>
@@ -205,7 +236,7 @@ export default function App() {
       {page === "Products" && <div className="panel"><div className="panelhead"><div><h3>Product catalogue</h3><p>Products saved in your database</p></div><button className="primary" onClick={() => openNewProduct()}>＋ Add product</button></div><ProductTable products={products} onEdit={openNewProduct} onArchive={archiveProduct}/></div>}
       {page === "Inventory" && <div className="panel"><div className="panelhead"><div><h3>Stock overview</h3><p>Current available quantities and reorder levels</p></div></div><ProductTable products={products} inventory/></div>}
       {page === "Sales" && <div className="panel"><div className="panelhead"><div><h3>Sales history</h3><p>Latest 100 bills</p></div><button className="textbtn" onClick={refreshData}>Refresh</button></div><div className="tablewrap"><table><thead><tr><th>INVOICE</th><th>DATE</th><th>PAYMENT</th><th>SUBTOTAL</th><th>GST</th><th>TOTAL</th></tr></thead><tbody>{sales.map(s => <tr key={s.id}><td><b>{s.invoice_number}</b></td><td>{new Date(s.created_at).toLocaleString("en-IN")}</td><td>{s.payment_method}</td><td>{money(s.subtotal)}</td><td>{money(s.tax_amount)}</td><td><b>{money(s.total_amount)}</b></td></tr>)}</tbody></table>{!sales.length && <p className="muted">No sales recorded yet.</p>}</div></div>}
-      {page === "Staff" && <div className="panel"><h3>Staff management</h3><p className="muted">Staff roles and cashier access are not enabled in this first database-connected version. For now, only signed-in accounts can access the app; authenticated accounts currently share the database permissions.</p></div>}
+      {page === "Staff" && profile?.role === "owner" && <div className="panel"><div className="panelhead"><div><h3>Staff accounts and roles</h3><p>Create/invite accounts in Supabase Authentication → Users, then assign their role here. New accounts default to cashier.</p></div><button className="textbtn" onClick={loadStaff}>Refresh</button></div><div className="tablewrap"><table><thead><tr><th>EMAIL</th><th>DISPLAY NAME</th><th>ROLE</th></tr></thead><tbody>{staff.map(member => <tr key={member.user_id}><td><b>{member.email || "—"}</b>{member.user_id === session.user.id ? " (you)" : ""}</td><td>{member.display_name || "—"}</td><td><select aria-label={"Role for " + member.email} value={member.role} disabled={member.user_id === session.user.id} onChange={e => updateStaffRole(member.user_id, e.target.value as UserProfile["role"])}><option value="owner">Owner</option><option value="manager">Manager</option><option value="cashier">Cashier</option></select></td></tr>)}</tbody></table>{!staff.length && <p className="muted">No staff profiles found yet.</p>}</div><p className="muted">For security, your own role cannot be changed from this screen. Use the Supabase SQL Editor for the initial owner promotion.</p></div>}
       {page === "Settings" && <div className="panel settings"><h3>Store settings</h3><p className="muted">These preferences are saved in this browser.</p><label className="fieldlabel">Store name<input value={storeName} onChange={e => setStoreName(e.target.value)}/></label><label className="checkline"><input type="checkbox" checked={gstEnabled} onChange={e => setGstEnabled(e.target.checked)}/> Enable GST on bills</label><label className="fieldlabel">GST rate (%)<input type="number" min="0" max="100" value={gstRate} onChange={e => setGstRate(e.target.value)} disabled={!gstEnabled}/></label><button className="primary" onClick={saveSettings}>Save preferences</button><p className="muted">Confirm your applicable GST rate and whether your product prices are GST-inclusive or GST-exclusive before issuing real tax invoices.</p></div>}
       {receipt && <div className="modalback"><div className="receipt print-area"><div className="receipt-head"><h2>{storeName}</h2><p>SALES RECEIPT</p><b>{receipt.invoice_number}</b><small>{new Date(receipt.created_at).toLocaleString("en-IN")}</small></div><div className="receipt-lines">{receipt.items.map(item => <div key={item.id}><span>{item.name} × {item.qty}</span><b>{money(item.selling_price * item.qty)}</b></div>)}</div><div className="receipt-total"><div><span>Subtotal</span><b>{money(receipt.subtotal)}</b></div><div><span>Discount</span><b>{money(receipt.discount_amount)}</b></div><div><span>GST</span><b>{money(receipt.tax_amount)}</b></div><div className="grand"><span>Total</span><b>{money(receipt.total_amount)}</b></div><small>Payment: {receipt.payment_method.toUpperCase()}</small></div><div className="receipt-actions"><button className="primary" onClick={() => window.print()}>Print receipt</button><button className="textbtn" onClick={() => setReceipt(null)}>Close</button></div></div></div>}
       {showProductForm && <div className="modalback"><form className="productform" onSubmit={saveProduct}><div className="panelhead"><h3>{productForm.id ? "Edit product" : "Add product"}</h3><button type="button" className="textbtn" onClick={() => setShowProductForm(false)}>Close</button></div><label className="fieldlabel">Product name<input required value={productForm.name} onChange={e => setProductForm({ ...productForm, name: e.target.value })}/></label><label className="fieldlabel">SKU<input required value={productForm.sku} onChange={e => setProductForm({ ...productForm, sku: e.target.value })}/></label><label className="fieldlabel">Category<input value={productForm.category} onChange={e => setProductForm({ ...productForm, category: e.target.value })}/></label><div className="formrow"><label className="fieldlabel">Selling price (₹)<input required type="number" min="0" step="0.01" value={productForm.selling_price} onChange={e => setProductForm({ ...productForm, selling_price: e.target.value })}/></label><label className="fieldlabel">Cost price (₹)<input type="number" min="0" step="0.01" value={productForm.cost_price} onChange={e => setProductForm({ ...productForm, cost_price: e.target.value })}/></label></div><div className="formrow"><label className="fieldlabel">Opening stock<input required type="number" min="0" step="1" value={productForm.stock_qty} onChange={e => setProductForm({ ...productForm, stock_qty: e.target.value })}/></label><label className="fieldlabel">Reorder level<input type="number" min="0" step="1" value={productForm.reorder_level} onChange={e => setProductForm({ ...productForm, reorder_level: e.target.value })}/></label></div><button className="primary full" disabled={loading}>Save product</button></form></div>}

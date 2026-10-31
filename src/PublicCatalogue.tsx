@@ -9,6 +9,7 @@ type PublicProduct = {
   category: string | null;
   selling_price: number;
   in_stock: boolean;
+  image_url: string | null;
 };
 type CartLine = PublicProduct & { quantity: number };
 
@@ -102,7 +103,7 @@ export default function PublicCatalogue() {
           : error ? <div className="catalogue-state catalogue-error">{error}</div>
           : !visibleProducts.length ? <div className="catalogue-state">No products found. Try another search or category.</div>
           : <div className="catalogue-grid">{visibleProducts.map(product => <article className="catalogue-product" key={product.product_id}>
-              <div className="catalogue-product-art"><span>✎</span><small>{product.category || "STATIONERY"}</small></div>
+              <div className="catalogue-product-art">{product.image_url ? <img src={product.image_url} alt={product.name} loading="lazy"/> : <span>✎</span>}<small>{product.category || "STATIONERY"}</small></div>
               <div className="catalogue-product-info"><span className="catalogue-sku">{product.sku}</span><h3>{product.name}</h3><p className={product.in_stock ? "catalogue-stock" : "catalogue-stock out"}>{product.in_stock ? "● Available" : "● Currently unavailable"}</p><div className="catalogue-product-bottom"><strong>{money(product.selling_price)}</strong><button disabled={!product.in_stock} onClick={() => add(product)}>{product.in_stock ? "＋ Add" : "Out of stock"}</button></div></div>
             </article>)}</div>}
       </section>

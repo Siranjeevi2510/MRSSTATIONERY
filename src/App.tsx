@@ -34,7 +34,8 @@ const money = (n: number) => "₹" + Number(n || 0).toFixed(2);
 const todayStart = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.toISOString(); };
 
 export default function App() {
-  const path = window.location.pathname.replace(/\\/+$/, "") || "/";
+  const rawPath = window.location.pathname;
+  const path = rawPath.length > 1 && rawPath.endsWith("/") ? rawPath.slice(0, -1) : rawPath;
   return path === "/catalog" ? <PublicCatalogue /> : <PosApp />;
 }
 

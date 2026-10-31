@@ -36,7 +36,7 @@ const todayStart = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return 
 export default function App() {
   const rawPath = window.location.pathname;
   const path = rawPath.length > 1 && rawPath.endsWith("/") ? rawPath.slice(0, -1) : rawPath;
-  return path === "/catalog" ? <PublicCatalogue /> : <PosApp />;
+  return path === "/" || path === "/catalog" ? <PublicCatalogue /> : path === "/pos" ? <PosApp /> : <PublicCatalogue />;
 }
 
 function PosApp() {
